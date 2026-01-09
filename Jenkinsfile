@@ -16,24 +16,19 @@ pipeline {
             }
         }
 
-        stage('Build Frontend Docker Image') {
+        stage('Build Frontend Image') {
             steps {
                 dir('frontend') {
-                    sh '''
-                    docker build -t $FRONTEND_IMAGE:latest .
-                    '''
+                    sh 'docker build -t $FRONTEND_IMAGE:latest .'
                 }
             }
         }
 
-        stage('Build Backend Docker Image') {
+        stage('Build Backend Image') {
             steps {
-                sh '''
-                docker build \
-                  -f Dockerfile \
-                  -t $BACKEND_IMAGE:latest \
-                  .
-                '''
+                dir('backend') {
+                    sh 'docker build -t $BACKEND_IMAGE:latest .'
+                }
             }
         }
 
@@ -44,52 +39,54 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    '''
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                 }
             }
         }
 
-        stage('Push Images to Docker Hub') {
+        stage('Push Images') {
             steps {
                 sh '''
-                docker push $FRONTEND_IMAGE:latest
-                docker push $BACKEND_IMAGE:latest
+                  docker push $FRONTEND_IMAGE:latest
+                  docker push $BACKEND_IMAGE:latest
                 '''
             }
         }
 
-        stage('Run Containers') {
+        stage('Deploy Containers') {
             steps {
-                sh '''
-                docker rm -f frontend backend || true
+                withCredentials([
+                    string(credentialsId: 'mongo-uri', variable: 'MONGO_URI'),
+                    string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
+                ]) {
+                    sh '''
+                    docker rm -f frontend backend || true
 
-                docker run -d \
-                  --name backend \
-                   -p 5000:5000 \
-                   -e NODE_ENV=development \
-                -e PORT=5000 \
-                   -e MONGO_URI="mongodb+srv://sandeeptiwari_db_user:vHxJba4SRSaC4tIV@cluster0.cbb1rgz.mongodb.net/?appName=Cluster0" \
-                   -e JWT_SECRET="abc123" \
-                    sandeeptiwari0206/mern-backend:latest
+                    docker run -d \
+                      --name backend \
+                      -p 5000:5000 \
+                      -e NODE_ENV=development \
+                      -e PORT=5000 \
+                      -e MONGO_URI="$MONGO_URI" \
+                      -e JWT_SECRET="$JWT_SECRET" \
+                      $BACKEND_IMAGE:latest
 
-
-                docker run -d \
-                  --name frontend \
-                  -p 3000:3000 \
-                  $FRONTEND_IMAGE:latest
-                '''
+                    docker run -d \
+                      --name frontend \
+                      -p 3000:3000 \
+                      $FRONTEND_IMAGE:latest
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo "✅ Jenkins pipeline completed successfully!"
+            echo "✅ MERN pipeline deployed successfully!"
         }
         failure {
-            echo "❌ Jenkins pipeline failed. Check logs."
+            echo "❌ Pipeline failed. Check Jenkins logs."
         }
     }
 }
