@@ -30,7 +30,10 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
-                    docker build -t $BACKEND_IMAGE:latest .
+                    docker build \
+                      -f ../Dockerfile \
+                      -t $BACKEND_IMAGE:latest \
+                      .
                     '''
                 }
             }
